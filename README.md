@@ -171,3 +171,4 @@ df.groupby('cluster')[features].mean()
 
 ---
 
+https://preview--smallbiz-scout.lovable.app/file:///C:/Users/pc/Downloads/SDG8_UnsupervisedLearning_Report%20(1).pdf
