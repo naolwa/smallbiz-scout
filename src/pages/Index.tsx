@@ -14,6 +14,10 @@ import {
   generateInsights,
   type BusinessData,
 } from '@/lib/ml-utils';
+import { calculateElbowPoints } from '@/lib/elbow-utils';
+import { ElbowChart } from '@/components/ElbowChart';
+import { RegressionMetrics } from '@/components/RegressionMetrics';
+import { CorrelationMatrix } from '@/components/CorrelationMatrix';
 
 const Index = () => {
   const [rawData, setRawData] = useState<any[]>([]);
@@ -32,8 +36,8 @@ const Index = () => {
     return performClustering(processedData, 3);
   }, [processedData, showAnalysis]);
 
-  const forecast = useMemo(() => {
-    if (!showAnalysis || processedData.length === 0) return [];
+  const forecastData = useMemo(() => {
+    if (!showAnalysis || processedData.length === 0) return null;
     return performForecasting(processedData, 'sales', 6);
   }, [processedData, showAnalysis]);
 
@@ -41,6 +45,29 @@ const Index = () => {
     if (!showAnalysis || processedData.length === 0 || clusters.length === 0) return [];
     return generateInsights(processedData, clusters);
   }, [processedData, clusters, showAnalysis]);
+
+  const elbowPoints = useMemo(() => {
+    if (!showAnalysis || processedData.length === 0) return [];
+    return calculateElbowPoints(processedData, 8);
+  }, [processedData, showAnalysis]);
+
+  const optimalK = useMemo(() => {
+    if (elbowPoints.length < 2) return 3;
+    
+    // Simple elbow detection using the elbow formula
+    let maxDiff = 0;
+    let optimalIdx = 1;
+    
+    for (let i = 1; i < elbowPoints.length - 1; i++) {
+      const diff = elbowPoints[i - 1].inertia - elbowPoints[i].inertia;
+      if (diff > maxDiff) {
+        maxDiff = diff;
+        optimalIdx = i;
+      }
+    }
+    
+    return elbowPoints[optimalIdx]?.k || 3;
+  }, [elbowPoints]);
 
   const handleAnalyze = () => {
     if (processedData.length < 3) {
@@ -124,6 +151,13 @@ const Index = () => {
                   </div>
                 )}
 
+                {/* Elbow Method */}
+                {elbowPoints.length > 0 && (
+                  <div>
+                    <ElbowChart elbowPoints={elbowPoints} optimalK={optimalK} />
+                  </div>
+                )}
+
                 {/* Clustering */}
                 {clusters.length > 0 && (
                   <div>
@@ -132,11 +166,23 @@ const Index = () => {
                 )}
 
                 {/* Forecast */}
-                {forecast.length > 0 && (
+                {forecastData && (
                   <div>
-                    <ForecastChart forecast={forecast} />
+                    <ForecastChart forecast={forecastData.forecast} />
                   </div>
                 )}
+
+                {/* Regression Metrics */}
+                {forecastData && (
+                  <div>
+                    <RegressionMetrics metrics={forecastData.metrics} />
+                  </div>
+                )}
+
+                {/* Correlation Matrix */}
+                <div>
+                  <CorrelationMatrix data={processedData} />
+                </div>
 
                 {/* Ethics Section */}
                 <div>

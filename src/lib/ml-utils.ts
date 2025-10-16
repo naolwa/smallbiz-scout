@@ -30,6 +30,17 @@ export interface Insight {
   description: string;
 }
 
+export interface RegressionMetrics {
+  rSquared: number;
+  slope: number;
+  intercept: number;
+}
+
+export interface ElbowPoint {
+  k: number;
+  inertia: number;
+}
+
 // Simple K-Means implementation
 const simpleKMeans = (points: number[][], k: number) => {
   // Initialize centroids randomly from existing points
@@ -91,22 +102,35 @@ const simpleKMeans = (points: number[][], k: number) => {
   return { clusters, centroids };
 };
 
-// Clean and validate data
+// Clean and validate data with improved missing value handling
 export const cleanData = (data: any[]): BusinessData[] => {
+  // Calculate mean values for imputation
+  const calculateMean = (key: string) => {
+    const validValues = data
+      .map(row => parseFloat(row[key]))
+      .filter(val => !isNaN(val) && val !== null && val !== undefined);
+    return validValues.length > 0 
+      ? validValues.reduce((a, b) => a + b, 0) / validValues.length 
+      : 0;
+  };
+
+  const means = {
+    sales: calculateMean('sales'),
+    expenses: calculateMean('expenses'),
+    profit: calculateMean('profit'),
+    customers: calculateMean('customers'),
+    marketing_spend: calculateMean('marketing_spend'),
+  };
+
   return data
-    .filter(row => {
-      return row.month && 
-             !isNaN(parseFloat(row.sales)) && 
-             !isNaN(parseFloat(row.expenses)) && 
-             !isNaN(parseFloat(row.profit));
-    })
+    .filter(row => row.month) // Only require month to be present
     .map(row => ({
       month: String(row.month),
-      sales: parseFloat(row.sales) || 0,
-      expenses: parseFloat(row.expenses) || 0,
-      profit: parseFloat(row.profit) || 0,
-      customers: parseFloat(row.customers) || 0,
-      marketing_spend: parseFloat(row.marketing_spend) || 0,
+      sales: parseFloat(row.sales) || means.sales,
+      expenses: parseFloat(row.expenses) || means.expenses,
+      profit: parseFloat(row.profit) || means.profit,
+      customers: parseFloat(row.customers) || means.customers,
+      marketing_spend: parseFloat(row.marketing_spend) || means.marketing_spend,
     }));
 };
 
@@ -135,12 +159,18 @@ export const performForecasting = (
   data: BusinessData[], 
   metric: 'sales' | 'profit' = 'sales',
   monthsAhead: number = 6
-): ForecastResult[] => {
+): { forecast: ForecastResult[], metrics: RegressionMetrics } => {
   // Create x values (month index) and y values (metric)
   const x = data.map((_, i) => i);
   const y = data.map(d => d[metric]);
   
   const regression = new SimpleLinearRegression(x, y);
+  
+  // Calculate R-squared
+  const yMean = y.reduce((a, b) => a + b, 0) / y.length;
+  const ssTot = y.reduce((sum, yi) => sum + Math.pow(yi - yMean, 2), 0);
+  const ssRes = y.reduce((sum, yi, i) => sum + Math.pow(yi - regression.predict(i), 2), 0);
+  const rSquared = 1 - (ssRes / ssTot);
   
   // Generate forecast
   const results: ForecastResult[] = [];
@@ -164,7 +194,14 @@ export const performForecasting = (
     });
   }
   
-  return results;
+  return {
+    forecast: results,
+    metrics: {
+      rSquared: Math.max(0, Math.min(1, rSquared)),
+      slope: regression.slope,
+      intercept: regression.intercept,
+    }
+  };
 };
 
 // Generate business insights
